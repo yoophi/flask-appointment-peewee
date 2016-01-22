@@ -2,11 +2,11 @@ from flask import Flask
 from flask import abort, jsonify, redirect, render_template, request, url_for
 from flask.ext.login import LoginManager, current_user
 from flask.ext.login import login_user, login_required, logout_user
-from flask.ext.sqlalchemy import SQLAlchemy
+# from flask.ext.sqlalchemy import SQLAlchemy
+from peewee import SqliteDatabase
 
 from sched import filters
 from sched.forms import AppointmentForm, LoginForm
-from sched.models import Appointment, Base, User
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sched.db'
@@ -15,8 +15,12 @@ app.config['SECRET_KEY'] = 'enydM2ANhdcoKwdVa0jWvEsbPFuQpMjf'
 # Use Flask-SQLAlchemy for its engine and session configuration. Load the
 # extension, giving it the app object, and override its default Model class
 # with the pure SQLAlchemy declarative Base class.
-db = SQLAlchemy(app)
-db.Model = Base
+DATABASE = 'sched.db'
+database = SqliteDatabase(DATABASE)
+# db = SQLAlchemy(app)
+# db.Model = Base
+
+from sched.models import Appointment, User
 
 
 # Use Flask-Login to track the current user in Flask's session.
