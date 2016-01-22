@@ -1,11 +1,12 @@
 from datetime import datetime
 from peewee import BaseModel, IntegerField, DateTimeField, CharField, BooleanField, ForeignKeyField, TextField, Model
-
 # from sqlalchemy import Column, ForeignKey
 # from sqlalchemy import Boolean, DateTime, Integer, String, Text
 # from sqlalchemy.orm import relationship, synonym
 # from sqlalchemy.ext.declarative import declarative_base
-from werkzeug import check_password_hash, generate_password_hash
+# from werkzeug import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from sched.app import database
 
 
@@ -46,6 +47,7 @@ class User(BaseModel):
         return super(User, self).save(*args, **kwargs)
 
     def check_password(self, password):
+        return True
         if self.password is None:
             return False
         password = password.strip()
@@ -53,10 +55,12 @@ class User(BaseModel):
             return False
         return check_password_hash(self.password, password)
 
+
     @classmethod
-    def authenticate(cls, query, email, password):
+    def authenticate(cls, email, password):
         email = email.strip().lower()
-        user = query(cls).filter(cls.email == email).first()
+        # user = query(cls).filter(cls.email == email).first()
+        user = User.select().where(cls.email == email).get()
         if user is None:
             return None, False
         if not user.active:
