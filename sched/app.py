@@ -1,9 +1,7 @@
 import os
 
-from flask import Flask
-from flask import abort, jsonify, redirect, render_template, request, url_for
-from flask.ext.login import LoginManager, current_user
-from flask.ext.login import login_user, login_required, logout_user
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
+from flask.ext.login import LoginManager, current_user, login_user, login_required, logout_user
 from peewee import SqliteDatabase
 
 from sched import filters
@@ -35,6 +33,20 @@ def load_user(user_id):
 
 # Load custom Jinja filters from the `filters` module.
 filters.init_app(app)
+
+
+# Request handlers -- these two hooks are provided by flask and we will use them
+# to create and tear down a database connection on each request.
+@app.before_request
+def before_request():
+    g.db = database
+    g.db.connect()
+
+
+@app.after_request
+def after_request(response):
+    g.db.close()
+    return response
 
 
 @app.errorhandler(404)
@@ -84,7 +96,6 @@ def appointment_create():
 @login_required
 def appointment_edit(appointment_id):
     """Provide HTML form to edit a given appointment."""
-    # appt = db.session.query(Appointment).get(appointment_id)
     appt = Appointment.select().where(Appointment.id == appointment_id).get()
     if appt is None:
         abort(404)
