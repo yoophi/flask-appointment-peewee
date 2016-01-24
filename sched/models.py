@@ -1,22 +1,27 @@
 from datetime import datetime
-from peewee import BaseModel, DateTimeField, CharField, BooleanField, ForeignKeyField, TextField, Model
+from flask.ext.security import RoleMixin
+from flask.ext.security import UserMixin
+from peewee import DateTimeField, CharField, BooleanField, ForeignKeyField, TextField
 from werkzeug.security import check_password_hash, generate_password_hash
 from sched.app import database
 
 
-class BaseModel(Model):
-    class Meta:
-        database = database
+class Role(database.Model, RoleMixin):
+    name = CharField(unique=True)
+    description = TextField(null=True)
 
 
-class User(BaseModel):
+class User(database.Model, UserMixin):
+    email = CharField(max_length=100, unique=True, null=False)
+    active = BooleanField(default=True)
+    password = CharField(max_length=100)
+    active = BooleanField(default=True)
+    confirmed_at = DateTimeField(null=True)
+
     created = DateTimeField(default=datetime.now)
     modified = DateTimeField(default=datetime.now)
 
-    name = CharField(max_length=200)  # Column('name', String(200))
-    email = CharField(max_length=100, unique=True, null=False)  # Column(String(100), unique=True, nullable=False)
-    active = BooleanField(default=True)  # Column(Boolean, default=True)
-    password = CharField(max_length=100)
+    name = CharField(max_length=200)
 
     def set_password(self, password):
         if password:
@@ -28,7 +33,6 @@ class User(BaseModel):
         return super(User, self).save(*args, **kwargs)
 
     def check_password(self, password):
-        return True
         if self.password is None:
             return False
         password = password.strip()
@@ -39,7 +43,11 @@ class User(BaseModel):
     @classmethod
     def authenticate(cls, email, password):
         email = email.strip().lower()
-        user = User.select().where(cls.email == email).get()
+        try:
+            user = User.select().where(cls.email == email).get()
+        except cls.DoesNotExist:
+            user = None
+
         if user is None:
             return None, False
         if not user.active:
@@ -62,19 +70,29 @@ class User(BaseModel):
         return u'<{self.__class__.__name__}: {self.id}>'.format(self=self)
 
 
-class Appointment(BaseModel):
+class UserRoles(database.Model):
+    # Because peewee does not come with built-in many-to-many
+    # relationships, we need this intermediary class to link
+    # user to roles.
+    user = ForeignKeyField(User, related_name='roles')
+    role = ForeignKeyField(Role, related_name='users')
+    name = property(lambda self: self.role.name)
+    description = property(lambda self: self.role.description)
+
+
+class Appointment(database.Model):
     """An appointment on the calendar."""
-    created = DateTimeField(default=datetime.now)  # Column(DateTime, default=datetime.now)
-    modified = DateTimeField(default=datetime.now)  # Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created = DateTimeField(default=datetime.now)
+    modified = DateTimeField(default=datetime.now)
 
     user = ForeignKeyField(User)
 
-    title = CharField()  # Column(String(255))
-    start = DateTimeField()  # Column(DateTime, nullable=False)
-    end = DateTimeField()  # Column(DateTime, nullable=False)
-    allday = BooleanField()  # Column(Boolean, default=False)
-    location = CharField()  # Column(String(255))
-    description = TextField()  # Column(Text)
+    title = CharField()
+    start = DateTimeField()
+    end = DateTimeField()
+    allday = BooleanField()
+    location = CharField()
+    description = TextField()
 
     def save(self, *args, **kwargs):
         self.modified = datetime.now()
@@ -87,58 +105,3 @@ class Appointment(BaseModel):
 
     def __repr__(self):
         return u'<{self.__class__.__name__}: {self.id}>'.format(self=self)
-
-
-if __name__ == '__main__':
-    from datetime import timedelta
-
-    database.connect()
-    database.create_tables([User, Appointment])
-    now = datetime.now()
-
-    # Add a sample user.
-    user = User(name='Pyunghyuk Yoo',
-                email='yoophi@gmail.com',
-                )
-    user.set_password('secret')
-    user.save()
-
-    Appointment(
-        user=user,
-        title='Important Meeting',
-        start=now + timedelta(days=3),
-        end=now + timedelta(days=3, seconds=3600),
-        allday=False,
-        location='The Office',
-        description='...',
-    ).save()
-
-    Appointment(
-        user=user,
-        title='Past Meeting',
-        start=now - timedelta(days=3, seconds=3600),
-        end=now - timedelta(days=3),
-        allday=False,
-        location='The Office',
-        description='...',
-    ).save()
-
-    Appointment(
-        user=user,
-        title='Follow Up',
-        start=now + timedelta(days=4),
-        end=now + timedelta(days=4, seconds=3600),
-        allday=False,
-        location='The Office',
-        description='...',
-    ).save()
-
-    Appointment(
-        user=user,
-        title='Day Off',
-        start=now + timedelta(days=5),
-        end=now + timedelta(days=5),
-        allday=True,
-        location='The Office',
-        description='...',
-    ).save()

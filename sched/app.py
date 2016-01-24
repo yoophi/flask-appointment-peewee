@@ -1,22 +1,27 @@
 import os
-
-from flask import Flask, abort, g, jsonify, redirect, render_template, request, url_for
-from flask.ext.login import LoginManager, current_user, login_user, login_required, logout_user
-from peewee import SqliteDatabase
+from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask.ext.login import LoginManager, current_user, login_user, logout_user
+from flask_peewee.db import Database
+from flask.ext.security import Security, PeeweeUserDatastore, \
+    login_required
 
 from sched import filters
 from sched.forms import AppointmentForm, LoginForm
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'enydM2ANhdcoKwdVa0jWvEsbPFuQpMjf'
+app.config['SECURITY_REGISTERABLE'] = True
+app.config['DATABASE'] = {
+    'name': (os.path.join(os.path.dirname(__file__), 'sched.db')),
+    'engine': 'peewee.SqliteDatabase',
+}
 
 # Use Flask-SQLAlchemy for its engine and session configuration. Load the
 # extension, giving it the app object, and override its default Model class
 # with the pure SQLAlchemy declarative Base class.
-DATABASE = os.path.join(os.path.dirname(__file__), 'sched.db')
-database = SqliteDatabase(DATABASE)
+database = Database(app)
 
-from sched.models import Appointment, User
+from sched.models import Appointment, User, Role, UserRoles
 
 # Use Flask-Login to track the current user in Flask's session.
 login_manager = LoginManager()
@@ -24,29 +29,33 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to see your appointments.'
 
+user_datastore = PeeweeUserDatastore(database, User, Role, UserRoles)
+security = Security(app, user_datastore)
+
 
 @login_manager.user_loader
 def load_user(user_id):
     """Hook for Flask-Login to load a User instance from a user ID."""
-    return User.select().where(User.id == user_id).get()
+    try:
+        return User.select().where(User.id == user_id).get()
+    except Exception as e:
+        print type(e)
+        return None
 
 
 # Load custom Jinja filters from the `filters` module.
 filters.init_app(app)
 
 
-# Request handlers -- these two hooks are provided by flask and we will use them
-# to create and tear down a database connection on each request.
-@app.before_request
-def before_request():
-    g.db = database
-    g.db.connect()
+@app.before_first_request
+def create_user():
+    for Model in (Role, User, UserRoles, Appointment):
+        Model.drop_table(fail_silently=True)
+        Model.create_table(fail_silently=True)
 
-
-@app.after_request
-def after_request(response):
-    g.db.close()
-    return response
+    from werkzeug.security import generate_password_hash
+    user_datastore.create_user(email='yoophi@gmail.com', name='Pyunghyuk Yoo',
+                               password=generate_password_hash('password'))
 
 
 @app.errorhandler(404)
